@@ -2,33 +2,18 @@ use std::{
     env,
     io::Error,
     iter,
-    sync::{Arc, Mutex},
+    ops::Deref,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
-use futures_util::{SinkExt, StreamExt};
+use futures_util::StreamExt;
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::RwLock,
 };
-use tokio_tungstenite::tungstenite::Message;
 
-type Pixel = RwLock<(u8, u8, u8)>;
-
-type Row = RwLock<Vec<Pixel>>;
-
-type Grid = RwLock<Vec<Row>>;
-
-struct State {
-    grid: Grid,
-}
-impl State {
-    fn new() -> Self {
-        State {
-            grid: RwLock::new(Vec::new()),
-        }
-    }
-}
+mod place;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -41,22 +26,19 @@ async fn main() -> Result<(), Error> {
     let listener = try_socket.expect("Failed to bind");
     println!("Listening on: {}", addr);
 
-    let shared_state: Arc<State> = Arc::new(State::new());
+    let shared_state: Arc<RwLock<place::State>> = Arc::new(RwLock::new(place::State::new()));
     {
         let now = Instant::now();
-        let mut guard = shared_state.grid.write().await;
-        guard.append(
-            &mut iter::repeat_with(|| {
-                RwLock::new(
-                    iter::repeat_with(|| RwLock::new((255, 255, 255)))
-                        .take(1000)
-                        .collect(),
-                )
-            })
-            .take(1000)
-            .collect(),
-        );
+        let mut state_guard = shared_state.write().await;
+        let state = &mut *state_guard;
+        state.add_rows(1000).await;
+        state.add_columns(1000).await;
         println!("{}", now.elapsed().as_millis());
+        println!(
+            "[Width: {}]  [Height: {}]",
+            state.grid.read().await.get(0).unwrap().read().await.len(),
+            state.grid.read().await.len(),
+        );
     }
 
     while let Ok((stream, _)) = listener.accept().await {
@@ -66,7 +48,7 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
-async fn accept_connection(stream: TcpStream, state: Arc<State>) {
+async fn accept_connection(stream: TcpStream, _state: Arc<RwLock<place::State>>) {
     let addr = stream
         .peer_addr()
         .expect("connected streams should have a peer address");
@@ -78,7 +60,7 @@ async fn accept_connection(stream: TcpStream, state: Arc<State>) {
 
     println!("New WebSocket connection: {}", addr);
 
-    let (mut write, _read) = ws_stream.split();
+    let (_write, _read) = ws_stream.split();
     let mut interval = tokio::time::interval(Duration::from_secs(1));
 
     loop {
