@@ -28,17 +28,12 @@ async fn main() -> Result<(), Error> {
 
     let shared_state: Arc<RwLock<place::State>> = Arc::new(RwLock::new(place::State::new()));
     {
-        let now = Instant::now();
         let mut state_guard = shared_state.write().await;
         let state = &mut *state_guard;
-        state.add_rows(1000).await;
-        state.add_columns(1000).await;
+        state.set_grid_size(1000, 1000).await;
+        let now = Instant::now();
+        let cloned_grid = state.read_grid().await;
         println!("{}", now.elapsed().as_millis());
-        println!(
-            "[Width: {}]  [Height: {}]",
-            state.grid.read().await.get(0).unwrap().read().await.len(),
-            state.grid.read().await.len(),
-        );
     }
 
     while let Ok((stream, _)) = listener.accept().await {
