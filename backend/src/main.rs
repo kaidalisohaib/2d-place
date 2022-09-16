@@ -1,18 +1,24 @@
 use std::{
     env,
     io::Error,
-    iter,
-    ops::Deref,
+    ptr,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use futures_util::StreamExt;
+use bebop::{prelude::*, SubRecord};
+use futures_util::{future, FutureExt, SinkExt, StreamExt, TryStreamExt};
+use generated::grid::*;
 use tokio::{
     net::{TcpListener, TcpStream},
-    sync::RwLock,
+    sync::{
+        broadcast::{self, Receiver, Sender},
+        mpsc, RwLock,
+    },
 };
+use tokio_tungstenite::tungstenite::Message;
 
+mod generated;
 mod place;
 
 #[tokio::main]
@@ -30,48 +36,100 @@ async fn main() -> Result<(), Error> {
     {
         let mut state_guard = shared_state.write().await;
         let state = &mut *state_guard;
-        state.set_grid_size(1000, 1000).await;
         let now = Instant::now();
-        let cloned_grid = state.read_grid().await;
-        println!("{}", now.elapsed().as_millis());
+        state.set_grid_size(2000, 2000);
+        state.set_new_encoded_data();
+        println!("{:?}", now.elapsed());
     }
 
+    let (sender_grid_manipulator, receiver_grid_manipulator) = mpsc::channel::<Vec<u8>>(16);
+    let (sender_clients, receiver_clients) = broadcast::channel::<Vec<u8>>(16);
+
+    tokio::spawn(grid_manipulator(
+        receiver_grid_manipulator,
+        sender_clients.clone(),
+    ));
+
     while let Ok((stream, _)) = listener.accept().await {
-        tokio::spawn(accept_connection(stream, shared_state.clone()));
+        tokio::spawn(accept_connection(
+            stream,
+            shared_state.clone(),
+            sender_grid_manipulator.clone(),
+            sender_clients.subscribe(),
+        ));
     }
 
     Ok(())
 }
 
-async fn accept_connection(stream: TcpStream, _state: Arc<RwLock<place::State>>) {
+async fn accept_connection<'a>(
+    stream: TcpStream,
+    state: Arc<RwLock<place::State>>,
+    sender_grid_manipulator: mpsc::Sender<Vec<u8>>,
+    mut receiver_clients: broadcast::Receiver<Vec<u8>>,
+) {
     let addr = stream
         .peer_addr()
         .expect("connected streams should have a peer address");
-    println!("Peer address: {}", addr);
+    // println!("Peer address: {}", addr);
 
     let ws_stream = tokio_tungstenite::accept_async(stream)
         .await
         .expect("Error during the websocket handshake occurred");
 
-    println!("New WebSocket connection: {}", addr);
+    let (mut write, read) = ws_stream.split();
+    let now = Instant::now();
+    let mut response = write
+        .send(Message::Binary(
+            state.read().await.get_encoded_data_cloned(),
+        ))
+        .await;
 
-    let (_write, _read) = ws_stream.split();
-    let mut interval = tokio::time::interval(Duration::from_secs(1));
-
-    loop {
-        interval.tick().await;
-
-        // println!("{:?}", state.read());
-        // let response = write.send(Message::Text(state.to_string())).await;
-        // match response {
-        //     Ok(_) => {}
-        //     Err(_) => break,
-        // }
+    // If the full grid transaction failed we return
+    if let Err(_) = response {
+        return;
     }
 
-    // We should not forward messages other than text or binary.
-    // read.try_filter(|msg| future::ready(msg.is_text() || msg.is_binary()))
-    //     .forward(write)
-    //     .await
-    //     .expect("Failed to forward messages")
+    let receive_future = read
+        .try_filter(|msg| future::ready(msg.is_binary()))
+        .try_for_each(|msg| {
+            if let Err(_) = sender_grid_manipulator.try_send(msg.into_data()) {
+                return future::ok(());
+            }
+            future::ok(())
+        });
+
+    let send_future = async {
+        while let Ok(encoded_data) = receiver_clients.recv().await {
+            write.send(Message::Binary(encoded_data)).await;
+        }
+    };
+
+    println!("{:?}", now.elapsed());
+    future::join(receive_future, send_future).await;
+    println!("finished");
+}
+
+async fn grid_manipulator(
+    mut receiver_grid_manipulator: mpsc::Receiver<Vec<u8>>,
+    sender_clients: broadcast::Sender<Vec<u8>>,
+) {
+    while let Some(encoded_data) = receiver_grid_manipulator.recv().await {
+        let decoded_bebop_data = BebopData::deserialize(&encoded_data).unwrap();
+        println!("{encoded_data:?}");
+        let decoded_pixel = Pixel::deserialize(&decoded_bebop_data.encoded_data).unwrap();
+        println!("{:?}", decoded_pixel);
+
+        let unaligned = std::ptr::addr_of!(decoded_pixel.x);
+        let v = unsafe { std::ptr::read_unaligned(unaligned) };
+
+        println!("{:?}", v);
+        
+        let unaligned = std::ptr::addr_of!(decoded_pixel.y);
+        let v = unsafe { std::ptr::read_unaligned(unaligned) };
+        println!("{:?}", v);
+        
+        // println!("{:?}", v);
+        sender_clients.send(encoded_data);
+    }
 }
