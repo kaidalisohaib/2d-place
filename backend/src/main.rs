@@ -115,21 +115,10 @@ async fn grid_manipulator(
     sender_clients: broadcast::Sender<Vec<u8>>,
 ) {
     while let Some(encoded_data) = receiver_grid_manipulator.recv().await {
-        let decoded_bebop_data = BebopData::deserialize(&encoded_data).unwrap();
-        println!("{encoded_data:?}");
-        let decoded_pixel = Pixel::deserialize(&decoded_bebop_data.encoded_data).unwrap();
+        let decoded_pixel =
+            Pixel::deserialize(&BebopData::deserialize(&encoded_data).unwrap().encoded_data)
+                .unwrap();
         println!("{:?}", decoded_pixel);
-
-        let unaligned = std::ptr::addr_of!(decoded_pixel.x);
-        let v = unsafe { std::ptr::read_unaligned(unaligned) };
-
-        println!("{:?}", v);
-        
-        let unaligned = std::ptr::addr_of!(decoded_pixel.y);
-        let v = unsafe { std::ptr::read_unaligned(unaligned) };
-        println!("{:?}", v);
-        
-        // println!("{:?}", v);
         sender_clients.send(encoded_data);
     }
 }

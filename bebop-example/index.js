@@ -14,13 +14,10 @@ var ws = new ws_1.default('ws://localhost:8080/');
 ws.binaryType = 'arraybuffer';
 ws.onopen = function () {
     console.log('CONNECT');
-    let pixel = { x: 13, y: 17, color: { red: 0, green: 0, blue: 0 } };
-    let encoded_pixel = schemas_1.Pixel.encode(pixel);
-    console.log(encoded_pixel);
+    let pixel = { x: 13, y: 17, color: { red: 255, green: 0, blue: 0 } };
+    let encoded_pixel = new Uint8Array(schemas_1.Pixel.encode(pixel));
     let bebop_data = { protocolVersion: schemas_1.ProtocolVersion, opcode: schemas_1.PixelOpcode, encodedData: encoded_pixel };
     let encoded_data = schemas_1.BebopData.encode(bebop_data);
-    console.log(encoded_data);
-    console.log(schemas_1.BebopData.decode(encoded_data));
     ws.send(encoded_data);
 };
 ws.onclose = function () {

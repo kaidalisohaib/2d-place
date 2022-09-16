@@ -12,13 +12,10 @@ var ws = new WebSocket('ws://localhost:8080/');
 ws.binaryType = 'arraybuffer'
 ws.onopen = function () {
     console.log('CONNECT');
-    let pixel = { x: 13, y: 17, color: { red: 0, green: 0, blue: 0 } };
-    let encoded_pixel = Pixel.encode(pixel);
-    console.log(encoded_pixel)
+    let pixel = { x: 13, y: 17, color: { red: 255, green: 0, blue: 0 } };
+    let encoded_pixel = new Uint8Array(Pixel.encode(pixel));
     let bebop_data = { protocolVersion: ProtocolVersion, opcode: PixelOpcode, encodedData: encoded_pixel };
     let encoded_data = BebopData.encode(bebop_data);
-    console.log(encoded_data)
-    console.log(BebopData.decode(encoded_data))
     ws.send(encoded_data);
 };
 ws.onclose = function () {
