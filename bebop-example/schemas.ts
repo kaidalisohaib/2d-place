@@ -22,6 +22,8 @@ export const GridOpcode: number = 1;
 
 export const PixelOpcode: number = 2;
 
+export const DeltaGridOpcode: number = 3;
+
 export interface IBebopData {
   protocolVersion: number;
   opcode: number;
@@ -250,6 +252,55 @@ export const Color = {
       red: field0,
       green: field1,
       blue: field2,
+    };
+    return message;
+  },
+};
+
+export interface IDeltaGrid {
+  delta: Array<IPixel>;
+}
+
+export const DeltaGrid = {
+  encode(message: IDeltaGrid): Uint8Array {
+    const view = BebopView.getInstance();
+    view.startWriting();
+    this.encodeInto(message, view);
+    return view.toArray();
+  },
+
+  encodeInto(message: IDeltaGrid, view: BebopView): number {
+    const before = view.length;
+      {
+        const length0 = message.delta.length;
+        view.writeUint32(length0);
+        for (let i0 = 0; i0 < length0; i0++) {
+          Pixel.encodeInto(message.delta[i0], view)
+        }
+      }
+    const after = view.length;
+    return after - before;
+  },
+
+  decode(buffer: Uint8Array): IDeltaGrid {
+    const view = BebopView.getInstance();
+    view.startReading(buffer);
+    return this.readFrom(view);
+  },
+
+  readFrom(view: BebopView): IDeltaGrid {
+    let field0: Array<IPixel>;
+    {
+      let length0 = view.readUint32();
+      field0 = new Array<IPixel>(length0);
+      for (let i0 = 0; i0 < length0; i0++) {
+        let x0: IPixel;
+        x0 = Pixel.readFrom(view);
+        field0[i0] = x0;
+      }
+    }
+    let message: IDeltaGrid = {
+      delta: field0,
     };
     return message;
   },

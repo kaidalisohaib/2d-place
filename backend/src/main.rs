@@ -1,18 +1,18 @@
 use std::{
     env,
     io::Error,
-    ptr,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use bebop::{prelude::*, SubRecord};
-use futures_util::{future, FutureExt, SinkExt, StreamExt, TryStreamExt};
+use bebop::{prelude::*};
+use futures_util::{future, pin_mut, SinkExt, StreamExt, TryStreamExt};
 use generated::grid::*;
+
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{
-        broadcast::{self, Receiver, Sender},
+        broadcast::{self},
         mpsc, RwLock,
     },
 };
@@ -34,21 +34,24 @@ async fn main() -> Result<(), Error> {
 
     let shared_state: Arc<RwLock<place::State>> = Arc::new(RwLock::new(place::State::new()));
     {
+        let now = Instant::now();
         let mut state_guard = shared_state.write().await;
         let state = &mut *state_guard;
-        let now = Instant::now();
-        state.set_grid_size(2000, 2000);
-        state.set_new_encoded_data();
+        state.set_grid_size(1000, 1000).await;
+        state.set_new_encoded_grid_data().await;
         println!("{:?}", now.elapsed());
     }
 
     let (sender_grid_manipulator, receiver_grid_manipulator) = mpsc::channel::<Vec<u8>>(16);
-    let (sender_clients, receiver_clients) = broadcast::channel::<Vec<u8>>(16);
+    let (sender_clients, _receiver_clients) = broadcast::channel::<Vec<u8>>(16);
 
     tokio::spawn(grid_manipulator(
+        shared_state.clone(),
         receiver_grid_manipulator,
         sender_clients.clone(),
     ));
+
+    tokio::spawn(full_grid_saver(shared_state.clone()));
 
     while let Ok((stream, _)) = listener.accept().await {
         tokio::spawn(accept_connection(
@@ -71,24 +74,24 @@ async fn accept_connection<'a>(
     let addr = stream
         .peer_addr()
         .expect("connected streams should have a peer address");
-    // println!("Peer address: {}", addr);
+    println!("Peer address: {}", addr);
 
     let ws_stream = tokio_tungstenite::accept_async(stream)
         .await
         .expect("Error during the websocket handshake occurred");
 
     let (mut write, read) = ws_stream.split();
-    let now = Instant::now();
-    let mut response = write
-        .send(Message::Binary(
-            state.read().await.get_encoded_data_cloned(),
+    write
+        .feed(Message::Binary(
+            state.read().await.get_encoded_grid_data_cloned().await,
         ))
         .await;
-
-    // If the full grid transaction failed we return
-    if let Err(_) = response {
-        return;
-    }
+    write
+        .feed(Message::Binary(
+            state.read().await.get_encoded_delta_data_cloned().await,
+        ))
+        .await;
+    write.flush().await;
 
     let receive_future = read
         .try_filter(|msg| future::ready(msg.is_binary()))
@@ -101,16 +104,18 @@ async fn accept_connection<'a>(
 
     let send_future = async {
         while let Ok(encoded_data) = receiver_clients.recv().await {
+            let now = Instant::now();
             write.send(Message::Binary(encoded_data)).await;
+            println!("{:?}", now.elapsed());
         }
     };
 
-    println!("{:?}", now.elapsed());
-    future::join(receive_future, send_future).await;
-    println!("finished");
+    pin_mut!(receive_future, send_future);
+    future::select(receive_future, send_future).await;
 }
 
 async fn grid_manipulator(
+    state: Arc<RwLock<place::State>>,
     mut receiver_grid_manipulator: mpsc::Receiver<Vec<u8>>,
     sender_clients: broadcast::Sender<Vec<u8>>,
 ) {
@@ -118,7 +123,18 @@ async fn grid_manipulator(
         let decoded_pixel =
             Pixel::deserialize(&BebopData::deserialize(&encoded_data).unwrap().encoded_data)
                 .unwrap();
-        println!("{:?}", decoded_pixel);
+        let state_guard = state.read().await;
+        state_guard.set_pixel(decoded_pixel).await;
+        state_guard.add_pixel_to_delta(decoded_pixel).await;
+        state_guard.set_new_encoded_delta_data().await;
         sender_clients.send(encoded_data);
+    }
+}
+
+async fn full_grid_saver(state: Arc<RwLock<place::State>>) {
+    let mut tick = tokio::time::interval(Duration::from_millis(5000));
+    loop {
+        tick.tick().await;
+        state.read().await.set_new_encoded_grid_data().await;
     }
 }

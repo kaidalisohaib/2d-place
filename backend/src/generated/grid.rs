@@ -26,6 +26,8 @@ pub const GRID_OPCODE: u32 = 1;
 
 pub const PIXEL_OPCODE: u32 = 2;
 
+pub const DELTA_GRID_OPCODE: u32 = 3;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct BebopData<'raw> {
     pub protocol_version: u32,
@@ -253,6 +255,40 @@ impl<'raw> ::bebop::SubRecord<'raw> for Color {
 
 impl<'raw> ::bebop::Record<'raw> for Color {}
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeltaGrid<'raw> {
+    pub delta: ::bebop::SliceWrapper<'raw, Pixel>,
+}
+
+impl<'raw> ::bebop::SubRecord<'raw> for DeltaGrid<'raw> {
+    const MIN_SERIALIZED_SIZE: usize = <::bebop::SliceWrapper<'raw, Pixel>>::MIN_SERIALIZED_SIZE;
+
+    #[inline]
+    fn serialized_size(&self) -> usize {
+        self.delta.serialized_size()
+    }
+
+    #[allow(unaligned_references)]
+    fn _serialize_chained<W: ::std::io::Write>(&self, dest: &mut W) -> ::bebop::SeResult<usize> {
+        Ok(self.delta._serialize_chained(dest)?)
+    }
+
+    fn _deserialize_chained(raw: &'raw [u8]) -> ::bebop::DeResult<(usize, Self)> {
+        let mut i = 0;
+        if raw.len() - i < Self::MIN_SERIALIZED_SIZE {
+            let missing = Self::MIN_SERIALIZED_SIZE - (raw.len() - i);
+            return Err(::bebop::DeserializeError::MoreDataExpected(missing));
+        }
+
+        let (read, v0) = ::bebop::SubRecord::_deserialize_chained(&raw[i..])?;
+        i += read;
+
+        Ok((i, Self { delta: v0 }))
+    }
+}
+
+impl<'raw> ::bebop::Record<'raw> for DeltaGrid<'raw> {}
+
 #[cfg(feature = "bebop-owned-all")]
 pub mod owned {
     #![allow(warnings)]
@@ -266,6 +302,8 @@ pub mod owned {
     pub use super::GRID_OPCODE;
 
     pub use super::PIXEL_OPCODE;
+
+    pub use super::DELTA_GRID_OPCODE;
 
     #[derive(Clone, Debug, PartialEq)]
     pub struct BebopData {
@@ -426,4 +464,49 @@ pub mod owned {
     pub use super::Pixel;
 
     pub use super::Color;
+
+    #[derive(Clone, Debug, PartialEq)]
+    pub struct DeltaGrid {
+        pub delta: ::std::vec::Vec<Pixel>,
+    }
+
+    impl<'raw> ::core::convert::From<super::DeltaGrid<'raw>> for DeltaGrid {
+        fn from(value: super::DeltaGrid) -> Self {
+            Self {
+                delta: value.delta.iter().map(|value| value).collect(),
+            }
+        }
+    }
+
+    impl<'raw> ::bebop::SubRecord<'raw> for DeltaGrid {
+        const MIN_SERIALIZED_SIZE: usize = <::std::vec::Vec<Pixel>>::MIN_SERIALIZED_SIZE;
+
+        #[inline]
+        fn serialized_size(&self) -> usize {
+            self.delta.serialized_size()
+        }
+
+        #[allow(unaligned_references)]
+        fn _serialize_chained<W: ::std::io::Write>(
+            &self,
+            dest: &mut W,
+        ) -> ::bebop::SeResult<usize> {
+            Ok(self.delta._serialize_chained(dest)?)
+        }
+
+        fn _deserialize_chained(raw: &'raw [u8]) -> ::bebop::DeResult<(usize, Self)> {
+            let mut i = 0;
+            if raw.len() - i < Self::MIN_SERIALIZED_SIZE {
+                let missing = Self::MIN_SERIALIZED_SIZE - (raw.len() - i);
+                return Err(::bebop::DeserializeError::MoreDataExpected(missing));
+            }
+
+            let (read, v0) = ::bebop::SubRecord::_deserialize_chained(&raw[i..])?;
+            i += read;
+
+            Ok((i, Self { delta: v0 }))
+        }
+    }
+
+    impl<'raw> ::bebop::Record<'raw> for DeltaGrid {}
 }

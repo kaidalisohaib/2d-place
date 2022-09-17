@@ -2,6 +2,7 @@ const uint32 ProtocolVersion = 1;
 
 const uint32 GridOpcode = 1; 
 const uint32 PixelOpcode = 2; 
+const uint32 DeltaGridOpcode = 3; 
 
 struct BebopData {
   uint32 protocolVersion;
@@ -27,4 +28,8 @@ struct Color {
   byte red;
   byte green;
   byte blue;
+}
+
+struct DeltaGrid {
+  Pixel[] delta;
 }
