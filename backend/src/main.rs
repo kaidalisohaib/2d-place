@@ -37,7 +37,7 @@ async fn main() -> Result<(), Error> {
         let now = Instant::now();
         let mut state_guard = shared_state.write().await;
         let state = &mut *state_guard;
-        state.set_grid_size(1000, 1000).await;
+        state.set_grid_size(500, 500).await;
         state.set_new_encoded_grid_data().await;
         println!("{:?}", now.elapsed());
     }

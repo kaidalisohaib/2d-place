@@ -1,0 +1,35 @@
+const uint32 ProtocolVersion = 1; 
+
+const uint32 GridOpcode = 1; 
+const uint32 PixelOpcode = 2; 
+const uint32 DeltaGridOpcode = 3; 
+
+struct BebopData {
+  uint32 protocolVersion;
+  uint32 opcode;
+  byte[] encodedData;
+}
+
+struct Grid {
+  Row[] rows;
+}
+
+struct Row {
+  Color[] pixels;
+}
+
+struct Pixel {
+  uint32 x;
+  uint32 y;
+  Color color;
+}
+
+struct Color {
+  byte red;
+  byte green;
+  byte blue;
+}
+
+struct DeltaGrid {
+  Pixel[] delta;
+}
