@@ -5,7 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bebop::{prelude::*};
+use bebop::prelude::*;
 use futures_util::{future, pin_mut, SinkExt, StreamExt, TryStreamExt};
 use generated::grid::*;
 
@@ -104,9 +104,7 @@ async fn accept_connection<'a>(
 
     let send_future = async {
         while let Ok(encoded_data) = receiver_clients.recv().await {
-            let now = Instant::now();
             write.send(Message::Binary(encoded_data)).await;
-            println!("{:?}", now.elapsed());
         }
     };
 
