@@ -6,7 +6,17 @@
 		<meta name="viewport" content="width=device-width" />
 		%sveltekit.head%
 	</head>
+	<style>
+		html,
+		body,
+		#main {
+			height: 100%;
+		}
+		body{
+			margin: 0px;
+		}
+	</style>
 	<body>
-		<div>%sveltekit.body%</div>
+		<div id="main">%sveltekit.body%</div>
 	</body>
 </html>

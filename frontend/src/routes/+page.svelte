@@ -3,6 +3,3 @@
 </script>
 
 <Canvas />
-
-<style>
-</style>
