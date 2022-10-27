@@ -59,10 +59,6 @@
 
 <style>
 	#colorPickerWrapper {
-		z-index: 1;
-		position: absolute;
-		bottom: 0;
-		right: 0;
 		margin: 10px;
 		background-color: #383f4ee4;
 		display: flex;
@@ -72,6 +68,7 @@
 		width: 150px;
 		padding: 7px;
 		border-radius: 7px;
+		pointer-events: all !important;
 	}
 	#colorsToPick {
 		display: flex;

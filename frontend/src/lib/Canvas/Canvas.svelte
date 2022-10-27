@@ -31,12 +31,31 @@
 
 	let currentMousePosition: Vec2D = { x: 0, y: 0 };
 
-	let deltaCanvas: Vec2D = { x: 0, y: 0 };
+	let deltaCanvasPosition: Vec2D = { x: 0, y: 0 };
 	let zoomScale: number = 1;
+
+	let deltaPixelFocusPosition: Vec2D = { x: 0, y: 0 };
+	let currentSelectedPixelPosition: Vec2D = { x: -1, y: -1 };
+	let showPixelFocus: boolean = false;
 
 	let currentPixelColor: IColor = { red: 0, green: 0, blue: 0 };
 	let socket: WebSocket;
-
+	$: {
+		if (canvas) {
+			const rect = canvas.getBoundingClientRect();
+			const minX = -rect.width + 25;
+			const minY = -rect.height + 25;
+			const maxX = canvasContainer.clientWidth - 25;
+			const maxY = canvasContainer.clientHeight - 25;
+			deltaCanvasPosition.x = Math.max(Math.min(deltaCanvasPosition.x, maxX), minX);
+			deltaCanvasPosition.y = Math.max(Math.min(deltaCanvasPosition.y, maxY), minY);
+		}
+	}
+	$: {
+		deltaPixelFocusPosition = { x: deltaCanvasPosition.x, y: deltaCanvasPosition.y };
+		deltaPixelFocusPosition.x += currentSelectedPixelPosition.x * zoomScale;
+		deltaPixelFocusPosition.y += currentSelectedPixelPosition.y * zoomScale;
+	}
 	onMount(() => {
 		if (canvas.getContext) {
 			ctx = canvas.getContext('2d');
@@ -121,7 +140,12 @@
 			cancelClickCanvas = false;
 			return;
 		}
-		const newPixel: IPixel = { color: currentPixelColor, x, y };
+		showPixelFocus = true;
+		currentSelectedPixelPosition = { x, y };
+	}
+
+	function placePixel(position: Vec2D) {
+		const newPixel: IPixel = { color: currentPixelColor, x: position.x, y: position.y };
 		const encodedNewPixel: Uint8Array = new Uint8Array(Pixel.encode(newPixel));
 		const message: IBebopData = {
 			protocolVersion: PixelOpcode,
@@ -130,6 +154,7 @@
 		};
 		const encodedMessage: Uint8Array = new Uint8Array(BebopData.encode(message));
 		socket.send(encodedMessage);
+		showPixelFocus = false;
 	}
 
 	function mouseMoved(event: MouseEvent) {
@@ -137,7 +162,6 @@
 
 		const x: number = event.clientX;
 		const y: number = event.clientY;
-
 		if (targetId !== 'canvas' && targetId !== 'canvasContainer') {
 			drag = false;
 
@@ -146,8 +170,8 @@
 
 		if (event.buttons === 1) {
 			drag = true;
-			deltaCanvas.x += x - currentMousePosition.x;
-			deltaCanvas.y += y - currentMousePosition.y;
+			deltaCanvasPosition.x += x - currentMousePosition.x;
+			deltaCanvasPosition.y += y - currentMousePosition.y;
 		}
 
 		currentMousePosition = { x, y };
@@ -190,10 +214,10 @@
 		} else if (event.deltaY < 0) {
 			zoomScale *= 1.1;
 		}
-		zoomScale = Math.min(Math.max(zoomScale, -zoomScaleMax), zoomScaleMax);
+		zoomScale = Math.min(Math.max(zoomScale, 1 / zoomScaleMax), zoomScaleMax);
 		await tick();
 		const newCanvasPosition = solveCanvasPosition(event, lastRelativeMousePosition);
-		deltaCanvas = { x: newCanvasPosition.x, y: newCanvasPosition.y };
+		deltaCanvasPosition = { x: newCanvasPosition.x, y: newCanvasPosition.y };
 	}
 </script>
 
@@ -204,7 +228,6 @@
 	on:wheel={mouseZoom}
 	style:cursor={drag ? 'move' : 'default'}
 >
-	<ColorPicker bind:currentColor={currentPixelColor} />
 	<canvas
 		id="canvas"
 		bind:this={canvas}
@@ -212,9 +235,29 @@
 		on:mousemove={mouseMoveCanvas}
 		width="500"
 		height="500"
-		style:translate={`${deltaCanvas.x}px ${deltaCanvas.y}px`}
+		style:translate={`${deltaCanvasPosition.x}px ${deltaCanvasPosition.y}px`}
 		style:scale={zoomScale}
 	/>
+	<div
+		id="pixelFocus"
+		on:click={() => (showPixelFocus = false)}
+		style:translate={`${deltaPixelFocusPosition.x}px ${deltaPixelFocusPosition.y}px`}
+		style:width={`${zoomScale}px`}
+		style:height={`${zoomScale}px`}
+		style:display={showPixelFocus ? 'inline' : 'none'}
+	/>
+	<div id="bottomUI">
+		<button
+			id="pixelPlace"
+			on:click|self={() => placePixel(currentSelectedPixelPosition)}
+			style:visibility={showPixelFocus ? 'visible' : 'hidden'}
+		>
+			PLACE THE PIXEL <button id="removePixelPlace" on:click={() => (showPixelFocus = false)}
+				>✘</button
+			>
+		</button>
+		<ColorPicker bind:currentColor={currentPixelColor} />
+	</div>
 </div>
 
 <style>
@@ -225,9 +268,69 @@
 		background-color: #434c5e;
 		height: 100%;
 	}
-
+	#pixelFocus {
+		background-color: transparent;
+		border: white solid 2px;
+		outline: black solid 2px;
+		border-radius: 1px;
+		transform-origin: center;
+		position: absolute;
+		box-sizing: border-box;
+		animation: scallingIn 0.6s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate-reverse;
+		z-index: 1;
+	}
+	#bottomUI {
+		z-index: 2;
+		position: absolute;
+		bottom: 0px;
+		margin: 10px;
+		display: flex;
+		width: 100%;
+		flex-direction: row;
+		flex-wrap: wrap;
+		align-items: center;
+		pointer-events: none;
+		background: none;
+	}
+	#bottomUI > * {
+		pointer-events: all !important;
+	}
+	#pixelPlace {
+		background-color: rgb(9, 142, 9);
+		color: white;
+		font-size: larger;
+		border: none;
+		border-radius: 7px;
+		padding: 7px;
+		cursor: pointer;
+		margin-left: auto;
+		margin-right: auto;
+	}
+	#pixelPlace:hover {
+		background-color: rgb(8, 126, 8);
+	}
+	#removePixelPlace {
+		background-color: rgb(252, 73, 73);
+		border-radius: 7px;
+		padding: 7px;
+		color: white;
+		border: none;
+		cursor: pointer;
+	}
+	#removePixelPlace:hover {
+		background-color: rgb(205, 60, 60);
+	}
 	canvas {
 		image-rendering: pixelated;
 		transform-origin: top left;
+		position: absolute;
+	}
+	@keyframes scallingIn {
+		from {
+			scale: 1;
+		}
+		to {
+			scale: 1.5;
+		}
 	}
 </style>
