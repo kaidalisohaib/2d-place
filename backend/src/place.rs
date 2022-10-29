@@ -1,6 +1,7 @@
 use std::{iter, ops::DerefMut};
 
 use bebop::{Record, SliceWrapper, SubRecord};
+use rand::Rng;
 use tokio::sync::RwLock;
 
 // use crate::generated::grid::owned::*;
@@ -52,6 +53,16 @@ impl State {
     pub async fn set_grid_size(&mut self, new_width: usize, new_height: usize) {
         self.set_grid_height(new_height).await;
         self.set_grid_width(new_width).await;
+        let mut grid_guard = self.grid.write().await;
+        let mut rng = rand::thread_rng();
+        // Test to place random colors all over the grid
+        // for row_guard in grid_guard.iter_mut() {
+        //     for color in row_guard {
+        //         color.red = rng.gen_range(0..=255);
+        //         color.green = rng.gen_range(0..=255);
+        //         color.blue = rng.gen_range(0..=255);
+        //     }
+        // }
     }
 
     pub async fn set_grid_width(&mut self, new_width: usize) {

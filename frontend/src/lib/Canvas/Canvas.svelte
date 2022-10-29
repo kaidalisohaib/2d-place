@@ -24,7 +24,9 @@
 	let canvas: HTMLCanvasElement;
 	let ctx: CanvasRenderingContext2D | null;
 
-	let initialGrid: IGrid | null;
+	let grid: IGrid | null;
+	let gridWidth: number = 0;
+	let gridHeight: number = 0;
 
 	let drag: boolean = false;
 	let cancelClickCanvas = false;
@@ -76,7 +78,8 @@
 			switch (bebop_data.opcode) {
 				case GridOpcode:
 					structData = Grid.decode(bebop_data.encodedData);
-					initialGrid = structData;
+					grid = structData;
+					updateGridSize();
 					break;
 
 				case PixelOpcode:
@@ -86,8 +89,8 @@
 
 				case DeltaGridOpcode:
 					structData = DeltaGrid.decode(bebop_data.encodedData);
-					if (initialGrid) {
-						setInitialImage(initialGrid, structData);
+					if (grid) {
+						setInitialImage(grid, structData);
 					}
 					break;
 
@@ -101,7 +104,7 @@
 		if (!ctx) {
 			return;
 		}
-		let initailImageData: ImageData = ctx.createImageData(500, 500);
+		let initailImageData: ImageData = ctx.createImageData(gridWidth, gridHeight);
 		let redIdx: number = 0;
 		grid.rows.forEach((row, rowIdx) => {
 			row.pixels.forEach((color, pixelIdx) => {
@@ -113,14 +116,25 @@
 			});
 		});
 		deltaGird.delta.forEach((pixel) => {
-			redIdx = pixel.y * 500 * 4 + pixel.x * 4;
+			grid.rows[pixel.y].pixels[pixel.x] = pixel.color;
+			redIdx = pixel.y * gridWidth * 4 + pixel.x * 4;
 			initailImageData.data[redIdx] = pixel.color.red;
 			initailImageData.data[redIdx + 1] = pixel.color.green;
 			initailImageData.data[redIdx + 2] = pixel.color.blue;
 			initailImageData.data[redIdx + 3] = 255;
 		});
 		ctx.putImageData(initailImageData, 0, 0);
-		initialGrid = null;
+	}
+
+	function updateGridSize() {
+		if (grid && grid.rows) {
+			gridHeight = grid.rows.length;
+			if (gridHeight == 0) {
+				gridWidth = 0;
+			} else {
+				gridWidth = grid.rows[0].pixels.length;
+			}
+		}
 	}
 
 	function setPixel(newPixel: IPixel) {
@@ -180,10 +194,14 @@
 	function mouseMoveCanvas(event: MouseEvent) {}
 
 	function getCanvasRelativeMousePosition(event: MouseEvent): { x: number; y: number } {
+		if (!grid) {
+			return { x: 0, y: 0 };
+		}
 		const rect = canvas.getBoundingClientRect();
-		const ratio = 500 / rect.width;
-		const mouseX = (event.clientX - rect.x) * ratio;
-		const mouseY = (event.clientY - rect.y) * ratio;
+		const ratioX = gridWidth / rect.width;
+		const ratioY = gridHeight / rect.width;
+		const mouseX = (event.clientX - rect.x) * ratioX;
+		const mouseY = (event.clientY - rect.y) * ratioY;
 		return { x: mouseX, y: mouseY };
 	}
 
@@ -192,9 +210,10 @@
 		relativeMousePosition: { x: number; y: number }
 	): { x: number; y: number } {
 		const rect = canvas.getBoundingClientRect();
-		const ratio = 500 / rect.width;
-		const canvasX = event.clientX - relativeMousePosition.x / ratio;
-		const canvasY = event.clientY - relativeMousePosition.y / ratio;
+		const ratioX = gridWidth / rect.width;
+		const ratioY = gridHeight / rect.width;
+		const canvasX = event.clientX - relativeMousePosition.x / ratioX;
+		const canvasY = event.clientY - relativeMousePosition.y / ratioY;
 		return { x: canvasX, y: canvasY };
 	}
 
@@ -233,8 +252,8 @@
 		bind:this={canvas}
 		on:click={clickCanvas}
 		on:mousemove={mouseMoveCanvas}
-		width="500"
-		height="500"
+		width={`${gridWidth}`}
+		height={`${gridHeight}`}
 		style:translate={`${deltaCanvasPosition.x}px ${deltaCanvasPosition.y}px`}
 		style:scale={zoomScale}
 	/>
