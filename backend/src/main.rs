@@ -9,6 +9,7 @@ use bebop::prelude::*;
 use futures_util::{future, pin_mut, SinkExt, StreamExt, TryStreamExt};
 use generated::grid::*;
 
+use local_ip_address::local_ip;
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{
@@ -23,9 +24,13 @@ mod place;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let addr = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "127.0.0.1:8080".to_string());
+    let my_local_ip = local_ip().unwrap();
+    let addr = match env::args().nth(1) {
+        Some(arg) if arg == "--host".to_string() => {
+            my_local_ip.to_string() + ":8080"
+        }
+        Some(_) | None => "127.0.0.1:8080".to_string(),
+    };
 
     // Create the event loop and TCP listener we'll accept connections on.
     let try_socket = TcpListener::bind(&addr).await;
@@ -37,7 +42,7 @@ async fn main() -> Result<(), Error> {
         let now = Instant::now();
         let mut state_guard = shared_state.write().await;
         let state = &mut *state_guard;
-        state.set_grid_size(400, 400).await;
+        state.set_grid_size(100, 100).await;
         state.set_new_encoded_grid_data().await;
         println!("{:?}", now.elapsed());
     }

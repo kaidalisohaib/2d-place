@@ -20,6 +20,10 @@
 		y: number;
 	}
 	const zoomScaleMax: number = 30;
+
+	let loading = true;
+	let error = false;
+
 	let canvasContainer: HTMLDivElement;
 	let canvas: HTMLCanvasElement;
 	let ctx: CanvasRenderingContext2D | null;
@@ -67,10 +71,14 @@
 		}
 		canvasContainer = document.getElementById('canvasContainer') as HTMLDivElement;
 
-		socket = new WebSocket('ws://127.0.0.1:8080');
+		socket = new WebSocket(`ws://${location.hostname}:8080`);
 		socket.binaryType = 'arraybuffer';
+		socket.onerror = (e) => {
+			error = true;
+			loading = false;
+		};
 		socket.onopen = (e) => {};
-		socket.onclose = (_e) => {};
+		socket.onclose = (e) => {};
 		socket.onmessage = (e) => {
 			let binary_data: Uint8Array = new Uint8Array(e.data);
 			let bebop_data = BebopData.decode(binary_data);
@@ -91,6 +99,7 @@
 					structData = DeltaGrid.decode(bebop_data.encodedData);
 					if (grid) {
 						setInitialImage(grid, structData);
+						loading = false;
 					}
 					break;
 
@@ -100,7 +109,7 @@
 		};
 	});
 
-	function setInitialImage(grid: IGrid, deltaGird: IDeltaGrid) {
+	async function setInitialImage(grid: IGrid, deltaGird: IDeltaGrid) {
 		if (!ctx) {
 			return;
 		}
@@ -124,6 +133,16 @@
 			initailImageData.data[redIdx + 3] = 255;
 		});
 		ctx.putImageData(initailImageData, 0, 0);
+		let canvasRect = canvas.getBoundingClientRect();
+		const containerCanvasWidthRatio = canvasContainer.clientWidth / canvasRect.width;
+		const containerCanvasHeightRatio = canvasContainer.clientHeight / canvasRect.height;
+		zoomScale = Math.min(containerCanvasWidthRatio, containerCanvasHeightRatio) * 0.9;
+		await tick();
+		canvasRect = canvas.getBoundingClientRect();
+		deltaCanvasPosition = {
+			x: (canvasContainer.clientWidth - canvasRect.width) / 2,
+			y: (canvasContainer.clientHeight - canvasRect.height) / 2
+		};
 	}
 
 	function updateGridSize() {
@@ -199,7 +218,7 @@
 		}
 		const rect = canvas.getBoundingClientRect();
 		const ratioX = gridWidth / rect.width;
-		const ratioY = gridHeight / rect.width;
+		const ratioY = gridHeight / rect.height;
 		const mouseX = (event.clientX - rect.x) * ratioX;
 		const mouseY = (event.clientY - rect.y) * ratioY;
 		return { x: mouseX, y: mouseY };
@@ -211,7 +230,7 @@
 	): { x: number; y: number } {
 		const rect = canvas.getBoundingClientRect();
 		const ratioX = gridWidth / rect.width;
-		const ratioY = gridHeight / rect.width;
+		const ratioY = gridHeight / rect.height;
 		const canvasX = event.clientX - relativeMousePosition.x / ratioX;
 		const canvasY = event.clientY - relativeMousePosition.y / ratioY;
 		return { x: canvasX, y: canvasY };
@@ -247,6 +266,11 @@
 	on:wheel={mouseZoom}
 	style:cursor={drag ? 'move' : 'default'}
 >
+	{#if loading}
+		<div id="loading">Loading ...</div>
+	{:else if error}
+		<div id="error">Error !</div>
+	{/if}
 	<canvas
 		id="canvas"
 		bind:this={canvas}
@@ -271,10 +295,13 @@
 			on:click|self={() => placePixel(currentSelectedPixelPosition)}
 			style:visibility={showPixelFocus ? 'visible' : 'hidden'}
 		>
-			PLACE THE PIXEL <button id="removePixelPlace" on:click={() => (showPixelFocus = false)}
-				>✘</button
-			>
+			PLACE THE PIXEL
 		</button>
+		<button
+			id="removePixelPlace"
+			style:visibility={showPixelFocus ? 'visible' : 'hidden'}
+			on:click={() => (showPixelFocus = false)}>✘</button
+		>
 		<ColorPicker bind:currentColor={currentPixelColor} />
 	</div>
 </div>
@@ -304,7 +331,8 @@
 		bottom: 0px;
 		margin: 10px;
 		display: flex;
-		width: 100%;
+		width: calc(100% - 20px);
+		box-sizing: border-box;
 		flex-direction: row;
 		flex-wrap: wrap;
 		align-items: center;
@@ -323,17 +351,18 @@
 		padding: 7px;
 		cursor: pointer;
 		margin-left: auto;
-		margin-right: auto;
+		margin-right: 5px;
 	}
 	#pixelPlace:hover {
 		background-color: rgb(8, 126, 8);
 	}
 	#removePixelPlace {
 		background-color: rgb(252, 73, 73);
+		margin-right: auto;
 		border-radius: 7px;
 		padding: 7px;
 		color: white;
-		border: none;
+		border: white solid 3px;
 		cursor: pointer;
 	}
 	#removePixelPlace:hover {
@@ -343,6 +372,41 @@
 		image-rendering: pixelated;
 		transform-origin: top left;
 		position: absolute;
+	}
+	#loading{
+		font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: xx-large;
+		z-index: 3;
+		position: absolute;
+		width: 100%;
+		height: 100%;
+		animation: smallScallingIn 0.6s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate-reverse;
+		background-color: rgba(25, 25, 25, 0.799);
+	}
+	#error{
+		font-family: 'Lucida Sans', 'Lucida Sans Regular', 'Lucida Grande', 'Lucida Sans Unicode', Geneva, Verdana, sans-serif;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: xx-large;
+		z-index: 3;
+		position: absolute;
+		width: 100%;
+		height: 100%;
+		animation: smallScallingIn 0.6s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate-reverse;
+		background-color: rgba(25, 25, 25, 0.799);
+		color: rgb(208, 46, 46);
+	}
+	@keyframes smallScallingIn {
+		from {
+			scale: 1;
+		}
+		to {
+			scale: 1.1;
+		}
 	}
 	@keyframes scallingIn {
 		from {

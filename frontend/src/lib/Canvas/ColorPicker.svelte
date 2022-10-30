@@ -2,20 +2,22 @@
 	import type { IColor } from '$lib/schemas/schemas';
 	import { onMount } from 'svelte';
 	const colors: IColor[] = [
-		{ red: 0, green: 0, blue: 0 },
 		{ red: 255, green: 255, blue: 255 },
+		{ red: 192, green: 192, blue: 192 },
+		{ red: 128, green: 128, blue: 128 },
+		{ red: 0, green: 0, blue: 0 },
 		{ red: 255, green: 0, blue: 0 },
-		{ red: 0, green: 255, blue: 0 },
-		{ red: 0, green: 0, blue: 255 },
+		{ red: 128, green: 0, blue: 0 },
 		{ red: 255, green: 255, blue: 0 },
+		{ red: 255, green: 140, blue: 0 },
+		{ red: 0, green: 255, blue: 0 },
+		{ red: 0, green: 128, blue: 0 },
 		{ red: 0, green: 255, blue: 255 },
+		{ red: 0, green: 128, blue: 128 },
+		{ red: 0, green: 0, blue: 255 },
+		{ red: 0, green: 0, blue: 128 },
 		{ red: 255, green: 0, blue: 255 },
-		{ red: 122, green: 0, blue: 0 },
-		{ red: 122, green: 122, blue: 0 },
-		{ red: 0, green: 122, blue: 0 },
-		{ red: 0, green: 122, blue: 122 },
-		{ red: 0, green: 0, blue: 122 },
-		{ red: 122, green: 122, blue: 122 }
+		{ red: 128, green: 0, blue: 128 }
 	];
 
 	export let currentColor: IColor = { red: 0, green: 0, blue: 0 };
