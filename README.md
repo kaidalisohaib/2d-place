@@ -10,7 +10,7 @@ A real-time, collaborative pixel art canvas inspired by r/place, built with a hi
 
 ### **Visual Demo**
 
-![](./assets/webpage.png)
+![](https://raw.githubusercontent.com/kaidalisohaib/2d-place/refs/heads/main/assets/webpage.png)
 
 ---
 
